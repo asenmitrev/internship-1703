@@ -1,6 +1,9 @@
 import { Box, ButtonGroup, IconButton, Text } from "@chakra-ui/react";
 import { useCallback, useRef, useState } from "react";
 import { FaMicrophone, FaPause, FaPlay, FaStop } from "react-icons/fa";
+import { motion } from "framer-motion";
+
+const MotionIconButton = motion(IconButton);
 
 type RecordingStatus =
   | "idle"
@@ -58,7 +61,6 @@ const useReactMediaRecorder = ({
         const audioUrl = URL.createObjectURL(audioBlob);
         setMediaBlobUrl(audioUrl);
 
-        // Call onStop callback if provided
         if (onStop) {
           onStop(audioBlob);
         }
@@ -72,7 +74,6 @@ const useReactMediaRecorder = ({
     } catch (error) {
       console.error("Error accessing microphone:", error);
 
-      // Check if it's a permission denial
       if (error instanceof DOMException && error.name === "NotAllowedError") {
         setStatus("permission_denied");
       } else {
@@ -85,7 +86,6 @@ const useReactMediaRecorder = ({
     if (mediaRecorderRef.current && ["recording", "paused"].includes(status)) {
       mediaRecorderRef.current.stop();
 
-      // Stop all tracks in the stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
@@ -159,59 +159,62 @@ export const MediaRecorderComponent: React.FC<{
           <Text color="red.500">Permission denied to record audio</Text>
         )}
         {isRecording ? (
-          <IconButton
+          <MotionIconButton
             variant="outline"
             size="lg"
             borderRadius="full"
             aria-label="Pause Recording"
             onClick={pauseRecording}
-            animation="pulse 1.5s ease-in-out infinite"
-            _hover={{
-              animation: "none",
-            }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
           >
             <FaPause />
-          </IconButton>
+          </MotionIconButton>
         ) : isPaused ? (
-          <IconButton
+          <MotionIconButton
             variant="outline"
             size="lg"
             borderRadius="full"
             aria-label="Resume Recording"
             onClick={resumeRecording}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
           >
             <FaMicrophone />
-          </IconButton>
+          </MotionIconButton>
         ) : (
           !isStopped && (
-            <IconButton
+            <MotionIconButton
               variant="solid"
               size="lg"
               borderRadius="full"
               aria-label="Start Recording"
               onClick={startRecording}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
             >
               <FaMicrophone />
-            </IconButton>
+            </MotionIconButton>
           )
         )}
         {isStopped &&
           (!isPlayingFinishedAudio ? (
-            <IconButton
+            <MotionIconButton
               variant="solid"
               size="lg"
               borderRadius="full"
-              colorScheme="white"
-              aria-label="Listen to Recording"
+              aria-label="Play Recording"
               onClick={() => {
                 setIsPlayingFinishedAudio(true);
                 audioRef.current?.play();
               }}
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
             >
               <FaPlay />
-            </IconButton>
+            </MotionIconButton>
           ) : (
-            <IconButton
+            <MotionIconButton
               variant="outline"
               size="lg"
               borderRadius="full"
@@ -219,50 +222,30 @@ export const MediaRecorderComponent: React.FC<{
                 setIsPlayingFinishedAudio(false);
                 audioRef.current?.pause();
               }}
-              aria-label="Pause"
+              aria-label="Pause Playback"
+              whileHover={{ scale: 1.1 }}
+              whileTap={{ scale: 0.9 }}
             >
               <FaPause />
-            </IconButton>
+            </MotionIconButton>
           ))}
         {(isRecording || isPaused) && (
-          <IconButton
+          <MotionIconButton
             variant="ghost"
             size="lg"
             colorScheme="red"
             borderRadius="full"
             aria-label="Stop Recording"
             onClick={stopRecording}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.9 }}
           >
             <FaStop />
-          </IconButton>
+          </MotionIconButton>
         )}
       </ButtonGroup>
 
-      {status !== "permission_denied" && (
-        <Text color="gray.500" mt={4}>
-          {isRecording
-            ? "Recording..."
-            : isPaused
-            ? "Paused"
-            : isStopped
-            ? "Recording finished"
-            : "Record audio through your microphone."}
-        </Text>
-      )}
-      {isStopped && (
-        <Text
-          color="gray.200"
-          mt={4}
-          textDecoration="underline"
-          onClick={reset}
-          fontSize="sm"
-        >
-          Click to record again.
-        </Text>
-      )}
-      {mediaBlobUrl && (
-        <audio ref={audioRef} src={mediaBlobUrl} controls hidden />
-      )}
+      {mediaBlobUrl && <audio ref={audioRef} src={mediaBlobUrl} controls hidden />}
     </Box>
   );
 };
