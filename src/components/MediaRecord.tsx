@@ -1,268 +1,71 @@
 import { Box, ButtonGroup, IconButton, Text } from "@chakra-ui/react";
 import { useCallback, useRef, useState } from "react";
-import { FaMicrophone, FaPause, FaPlay, FaStop } from "react-icons/fa";
+import { FaMicrophone, FaStop } from "react-icons/fa";
+import { motion } from "framer-motion";
 
-type RecordingStatus =
-  | "idle"
-  | "recording"
-  | "paused"
-  | "stopped"
-  | "permission_denied";
+const MotionIconButton = motion(IconButton);
 
-interface UseReactMediaRecorderProps {
-  audio?: boolean;
-  onStop?: (blob: Blob) => void;
-}
-
-interface UseReactMediaRecorderReturn {
-  status: RecordingStatus;
-  startRecording: () => Promise<void>;
-  stopRecording: () => void;
-  mediaBlobUrl: string | null;
-  pauseRecording: () => void;
-  resumeRecording: () => void;
-  reset: () => void;
-}
-
-const useReactMediaRecorder = ({
-  audio = true,
-  onStop,
-}: UseReactMediaRecorderProps): UseReactMediaRecorderReturn => {
-  const [status, setStatus] = useState<RecordingStatus>("idle");
+export const MediaRecorderComponent: React.FC<{ onRecordEnd: (blob: Blob) => void }> = ({ onRecordEnd }) => {
+  const [status, setStatus] = useState<"idle" | "recording" | "stopped" | "permission_denied">("idle");
   const [mediaBlobUrl, setMediaBlobUrl] = useState<string | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
 
-  const reset = useCallback(() => {
-    setStatus("idle");
-    setMediaBlobUrl(null);
-    audioChunksRef.current = [];
-  }, []);
-
-  const startRecording = useCallback(async () => {
+  const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
-
       mediaRecorderRef.current = new MediaRecorder(stream);
-
       mediaRecorderRef.current.ondataavailable = (event) => {
         audioChunksRef.current.push(event.data);
       };
-
       mediaRecorderRef.current.onstop = () => {
         const audioBlob = new Blob(audioChunksRef.current, {
           type: mediaRecorderRef.current!.mimeType,
         });
-        const audioUrl = URL.createObjectURL(audioBlob);
-        setMediaBlobUrl(audioUrl);
-
-        // Call onStop callback if provided
-        if (onStop) {
-          onStop(audioBlob);
-        }
-
+        setMediaBlobUrl(URL.createObjectURL(audioBlob));
+        onRecordEnd(audioBlob);
         audioChunksRef.current = [];
         setStatus("stopped");
       };
-
       mediaRecorderRef.current.start();
       setStatus("recording");
     } catch (error) {
       console.error("Error accessing microphone:", error);
-
-      // Check if it's a permission denial
-      if (error instanceof DOMException && error.name === "NotAllowedError") {
-        setStatus("permission_denied");
-      } else {
-        setStatus("idle");
-      }
+      setStatus("permission_denied");
     }
-  }, [audio, onStop]);
+  };
 
-  const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && ["recording", "paused"].includes(status)) {
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && status === "recording") {
       mediaRecorderRef.current.stop();
-
-      // Stop all tracks in the stream
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     }
-  }, [status]);
-
-  const pauseRecording = useCallback(() => {
-    if (mediaRecorderRef.current && status === "recording") {
-      mediaRecorderRef.current.pause();
-      setStatus("paused");
-    }
-  }, [status]);
-
-  const resumeRecording = useCallback(() => {
-    if (mediaRecorderRef.current && status === "paused") {
-      mediaRecorderRef.current.resume();
-      setStatus("recording");
-    }
-  }, [status]);
-
-  return {
-    status,
-    startRecording,
-    stopRecording,
-    mediaBlobUrl,
-    pauseRecording,
-    resumeRecording,
-    reset,
   };
-};
-
-export const MediaRecorderComponent: React.FC<{
-  onRecordEnd: (blob: Blob) => void;
-}> = ({ onRecordEnd }) => {
-  const audioRef = useRef<HTMLAudioElement>(null);
-  const {
-    status,
-    startRecording,
-    stopRecording,
-    mediaBlobUrl,
-    pauseRecording,
-    resumeRecording,
-    reset,
-  } = useReactMediaRecorder({
-    audio: true,
-    onStop: (blob) => onRecordEnd(blob),
-  });
-  const [isPlayingFinishedAudio, setIsPlayingFinishedAudio] = useState(false);
-  const isRecording = status === "recording";
-  const isPaused = status === "paused";
-  const isStopped = status === "stopped";
 
   return (
-    <Box
-      width="full"
-      borderWidth={2}
-      borderStyle="dashed"
-      borderColor={isRecording ? "blue.500" : "whiteAlpha.200"}
-      borderRadius="lg"
-      p={8}
-      textAlign="center"
-      transition="border-color 0.2s ease-in-out"
-      cursor="pointer"
-      bg={"whiteAlpha.100"}
-      _hover={{
-        borderColor: "blue.500",
-      }}
-    >
-      <ButtonGroup gap={4}>
-        {status === "permission_denied" && (
-          <Text color="red.500">Permission denied to record audio</Text>
-        )}
-        {isRecording ? (
-          <IconButton
-            variant="outline"
-            size="lg"
-            borderRadius="full"
-            aria-label="Pause Recording"
-            onClick={pauseRecording}
-            animation="pulse 1.5s ease-in-out infinite"
-            _hover={{
-              animation: "none",
-            }}
-          >
-            <FaPause />
-          </IconButton>
-        ) : isPaused ? (
-          <IconButton
-            variant="outline"
-            size="lg"
-            borderRadius="full"
-            aria-label="Resume Recording"
-            onClick={resumeRecording}
-          >
-            <FaMicrophone />
-          </IconButton>
-        ) : (
-          !isStopped && (
-            <IconButton
-              variant="solid"
-              size="lg"
-              borderRadius="full"
-              aria-label="Start Recording"
-              onClick={startRecording}
-            >
-              <FaMicrophone />
-            </IconButton>
-          )
-        )}
-        {isStopped &&
-          (!isPlayingFinishedAudio ? (
-            <IconButton
-              variant="solid"
-              size="lg"
-              borderRadius="full"
-              colorScheme="white"
-              aria-label="Listen to Recording"
-              onClick={() => {
-                setIsPlayingFinishedAudio(true);
-                audioRef.current?.play();
-              }}
-            >
-              <FaPlay />
-            </IconButton>
-          ) : (
-            <IconButton
-              variant="outline"
-              size="lg"
-              borderRadius="full"
-              onClick={() => {
-                setIsPlayingFinishedAudio(false);
-                audioRef.current?.pause();
-              }}
-              aria-label="Pause"
-            >
-              <FaPause />
-            </IconButton>
-          ))}
-        {(isRecording || isPaused) && (
-          <IconButton
-            variant="ghost"
-            size="lg"
-            colorScheme="red"
-            borderRadius="full"
-            aria-label="Stop Recording"
-            onClick={stopRecording}
-          >
-            <FaStop />
-          </IconButton>
-        )}
-      </ButtonGroup>
-
-      {status !== "permission_denied" && (
-        <Text color="gray.500" mt={4}>
-          {isRecording
-            ? "Recording..."
-            : isPaused
-            ? "Paused"
-            : isStopped
-            ? "Recording finished"
-            : "Record audio through your microphone."}
-        </Text>
-      )}
-      {isStopped && (
-        <Text
-          color="gray.200"
-          mt={4}
-          textDecoration="underline"
-          onClick={reset}
-          fontSize="sm"
+    <Box textAlign="center">
+      <ButtonGroup>
+        {status === "permission_denied" && <Text color="red.500">Permission denied</Text>}
+        <MotionIconButton
+          variant={status === "recording" ? "solid" : "outline"}
+          size="lg"
+          borderRadius="full"
+          aria-label="Start Recording"
+          onClick={status === "recording" ? stopRecording : startRecording}
+          animate={{ scale: status === "recording" ? 1.2 : 1 }}
+          transition={{ duration: 0.2 }}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
         >
-          Click to record again.
-        </Text>
-      )}
-      {mediaBlobUrl && (
-        <audio ref={audioRef} src={mediaBlobUrl} controls hidden />
-      )}
+          {status === "recording" ? <FaStop /> : <FaMicrophone />}
+        </MotionIconButton>
+      </ButtonGroup>
+      {mediaBlobUrl && <audio ref={audioRef} src={mediaBlobUrl} controls hidden />}
     </Box>
   );
 };
